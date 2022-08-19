@@ -14,6 +14,17 @@ import numpy as np
 from lookup_table import LABEL_RGB_PALETTE
 
 
+def check_errors(img):
+    if img.validate_image_size() is None and img.check_pixels() is None:
+        print('ok')
+    elif img.validate_image_size() is not None and img.check_pixels() is not None:
+        print('ERRORS COLOR AND SIZE')
+    elif img.validate_image_size() is not None and img.check_pixels() is None:
+        print('ERROR SIZE')
+    else:
+        print('ERROR COLOR')
+
+
 class LidarSegmentationLabelsValidator:
     def __init__(self, path, image, height_required, length_required, amount_of_layers_required):
         self.path = path
@@ -88,12 +99,9 @@ if __name__ == '__main__':
 
         # passing the image for validation
         img = LidarSegmentationLabelsValidator(image_path, image_main, height_main, length_main, amount_of_layers)
-        if img.validate_image_size() is None and img.check_pixels() is None:
-            print('ok')
-        elif img.validate_image_size() is not None and img.check_pixels() is not None:
-            print('ERRORS COLOR AND SIZE')
-        elif img.validate_image_size() is not None and img.check_pixels() is None:
-            print('ERROR SIZE')
-        else:
-            print('ERROR COLOR')
+        check_errors(img)
         #img.open()
+
+        
+        
+        
