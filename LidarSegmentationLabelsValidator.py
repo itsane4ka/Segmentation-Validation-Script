@@ -1,7 +1,8 @@
 """
 Author -- Oleksandr Kats
-Contact -- oleksandr.kats@tmconnected.com
 Begin date -- 17.08.2022
+Data validation script can be used to check whether
+Lidar and Web of rail labels were annotated correctly.
 """
 
 # coding = utf - 8
@@ -11,97 +12,102 @@ import cv2
 import sys
 import functools
 import numpy as np
-from lookup_table import LABEL_RGB_PALETTE
+from annotation_errors import AnnotationErrors
+from lookup_table_web_of_rail import LABEL_RGB_PALETTE as LABEL_RGB_PALETTE_WEB_OF_RAIL
+from lookup_table_lidar_segmentation import LABEL_RGB_PALETTE as LABEL_RGB_PALETTE_LIDAR
+from lookup_table_simple_for_testing import LABEL_RGB_PALETTE as LABEL_RGB_PALETTE_SIMPLE
 
 
-def check_errors(img):
-    if img.validate_image_size() is None and img.check_pixels() is None:
-        print('ok')
-    elif img.validate_image_size() is not None and img.check_pixels() is not None:
-        print('ERRORS COLOR AND SIZE')
-    elif img.validate_image_size() is not None and img.check_pixels() is None:
-        print('ERROR SIZE')
-    else:
-        print('ERROR COLOR')
+class LabelValidator:
+    """ This class verifies if a label was annotated correctly. In addition,
+    it shows off a list of errors if they were found.
+    Uses an OpenCV (https://github.com/opencv/opencv) library to work with image.
+    """
 
-
-class LidarSegmentationLabelsValidator:
-    def __init__(self, path, image, height_required, length_required, amount_of_layers_required):
-        self.path = path
-        self.image = image
-        self.height_required = height_required
-        self.length_required = length_required
-        self.LABEL_RGB_PALETTE = LABEL_RGB_PALETTE
-        self.amount_of_layers_required = amount_of_layers_required
-
+    def __init__(self, path, image, height_required, length_required, amount_of_layers_required, color_map):
         # checking if the file is in image
-        if os.path.splitext(str(path))[1] == '.png':
-            print('Image ', path, ':\t', end=' ')
+        if os.path.splitext(str(path))[1] == ".png":
+            self.path = path
+            self.image = image
+            self.color_map = color_map
+            self.height_required = height_required
+            self.length_required = length_required
+            self.amount_of_layers_required = amount_of_layers_required
+        else:
+            raise Exception("Error! This is a bad quality .jpg photo.")
 
-    def open(self):
-        cv2.imshow('res:', self.image)
+    def display_image(self):
+        """ This method opens the image as a .png file.
+        """
+        cv2.imshow(str(self.path), self.image)
         cv2.waitKey(0)
 
     def validate_image_size(self):
+        """ This method checks if:
+        1. the image's shape is the same as required
+        2. the amount of channels is the same as required.
+
+        Returns the real size of the image.
+        """
         if self.image.shape[0] != self.height_required or self.image.shape[1] != self.length_required \
                 or self.image.shape[2] != self.amount_of_layers_required:
-            return ['SIZE ERROR', self.image.shape]
-        else:
-            return None
+            return [AnnotationErrors.SIZE_ERROR, self.image.shape]
 
     def check_pixels(self):
-        error_exist = False
+        """ This method checks if some label pixels were annotated incorrectly.
+        It returns the colors and coordinates of those pixels.
+        """
         pixels_counter = 0
-        pixel_color_present = False
         pixels_wrong_colored = []
-        pixels_wrong_colored_coordinates = []
 
         # making a numpy array of picture pixels
         pixel_array = np.asarray(cv2.cvtColor(self.image, cv2.COLOR_BGR2RGB))
-        pixel_array.resize(self.height_required * self.length_required, 3)
+        pixel_array.resize(self.image.shape[0] * self.image.shape[1], 3)
 
+        # checking the image pixels
         for pixel in pixel_array:
             pixel_color_present = False
-            for color_rgb in self.LABEL_RGB_PALETTE:
+            for color_rgb in self.color_map:
                 if functools.reduce(lambda x, y: x and y, map(lambda p, q: p == q, pixel, color_rgb), True):
                     pixel_color_present = True
                     break
             if not pixel_color_present:
-                pixels_wrong_colored_coordinates.append([pixels_counter // 4000, pixels_counter % 4000])
-                pixels_wrong_colored.append(pixel)
-                error_exist = True
+                pixels_wrong_colored.append((list(pixel), [pixels_counter // self.length_required,
+                                                           pixels_counter % self.length_required]))
             pixels_counter += 1
-        if error_exist:
-            return ['UNDEFINED COLOR ERROR', pixels_wrong_colored, pixels_wrong_colored_coordinates]
-        else:
-            return None
+
+        if len(pixels_wrong_colored) > 0:
+            return [AnnotationErrors.UNDEFINED_COLOR_ERROR, pixels_wrong_colored]
+
+    def check_errors(self):
+        """ This method returns a clearly visible list of image annotation errors.
+        """
+        errors_list = [self.validate_image_size(), self.check_pixels()]
+        return errors_list
 
 
-if __name__ == '__main__':
-    # dealing with the folder
-    files_in_dir = os.listdir('test')
-    print(len(files_in_dir), 'elements in folder.\n')
-
+if __name__ == "__main__":
     # constant size
-    errors_list = []
-    height_main = 1024
-    length_main = 1024
+    height_main = 500
+    length_main = 4000
     amount_of_layers = 3
+    folder_name = "testLidar/"
+
+    # dealing with the folder
+    files_in_dir = os.listdir(folder_name)
+    print(len(files_in_dir), "elements in folder.\n")
 
     for file_name in files_in_dir:
         try:
             # opening the image
-            image_path = 'test/' + file_name
-            #image_path = 'test/pic (246) - Bad.png'
+            image_path = folder_name + file_name
             image_main = cv2.imread(image_path)
         except:
-            raise FileNotFoundError('Could not open the file!')
+            raise FileNotFoundError("Could not open the file!")
 
         # passing the image for validation
-        img = LidarSegmentationLabelsValidator(image_path, image_main, height_main, length_main, amount_of_layers)
-        check_errors(img)
-        #img.open()
+        img = LabelValidator(image_path, image_main, height_main, length_main,
+                             amount_of_layers, LABEL_RGB_PALETTE_LIDAR)
+        # img.display_image()
 
-        
-        
-        
+        print("Image ", image_path, ": ", img.check_errors())
